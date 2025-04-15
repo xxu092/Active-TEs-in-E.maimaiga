@@ -1,0 +1,85 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+plot(cars)
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+```{r}
+library(tidyverse)
+dist<-read_tsv("gene_distances.tsv")
+```
+```{r}
+count(dist%>% filter(Distance < 0))
+#125
+```
+```{r}
+count(dist%>% filter(Distance >0) %>% filter(Distance <1000) )
+#594
+group1<-dist%>% filter(Distance >0) %>% filter(Distance <1000)
+sum(group1$Distance)
+#186271 bp 
+(14701-594-125)*1000
+#13982000
+13982000+186271
+#14168271bp upstream and downstream 1kb available 
+#upstream
+14168271+1000+1000+1000
+#14171271
+```
+```{r}
+count(dist%>% filter(Distance >1000) %>% filter(Distance <5000) )
+#474
+group2<-dist%>% filter(Distance >1000) %>% filter(Distance <5000)
+sum(group2$Distance)
+#1271714 bp
+(14701-125-594-474)*4000
+#54032000 bp
+54032000+1271714
+#55303714
+#upstream 
+55303714+2299+724+3795
+#55310532
+```
+```{r}
+count(dist%>%filter(Distance > 5000))
+#13478
+group3<-dist%>%filter(Distance > 5000)
+sum(group3$Distance)
+#1147810264
+1147810264-(13478)*5000
+#1080420264
+#upstream
+1080420264+5068571
+#1085488835
+#downstream
+1080420264+2192121
+#1082612385
+```
+```{r}
+lastgene<-read_tsv("Emailastgenes.gff3",col_names = F)
+genome<-read_tsv("genome.txt")
+joined<-left_join(lastgene,genome,join_by("X1"=="chr"))
+joined<-joined %>% mutate(ends = end - X5)
+sum(joined$ends)
+2308121-(29*4000)
+#2192121
+```
+```{r}
+feature<-data.frame(
+  regions = c(">5kb Upstream","1-5kb Upstream", "1kb Upstream", "5\' UTR","Exon","Intron", "3\' UTR","1kb Downstream","1-5kb Downstream",">5kb Downstream"),
+  length = c(1085488835,55310532,14171271,751851,3473053,6285038,710390,14168271,55303714,1082612385)
+)
+```
+

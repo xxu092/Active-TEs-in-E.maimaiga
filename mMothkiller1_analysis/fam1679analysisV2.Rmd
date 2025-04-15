@@ -1,0 +1,304 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+
+
+# Analyze 1679 family with trimmed RepeatMasker result
+
+* Identity and length distribution
+
+
+```{r}
+library(tidyverse)
+RM1679<-read_table("~/bigdata/activefam/Emai1679_2024/Emai1679TEtrimmer.rmout",skip = 3, col_names = F)
+colnames(RM1679) <-c("sw","div","del","ins","query","qstart","qend","qleft","strand","family","class","rstart","rend","rleft","ID","overlap")
+
+```
+
+### Filter anything shorter than 80
+
+There are 661 copies
+There are 33 copies identical to consensus sequence
+
+```{r}
+RM1679 <- RM1679 %>% mutate(length = qend - qstart + 1)
+RM1679clean<-RM1679 %>% filter(length>=80)
+RM1679clean<-RM1679clean %>% mutate(Identity = 100 - div)
+#counts<-count(RM1679clean)
+#661 copies
+RM1679clean %>% filter(Identity == 100)
+count(RM1679clean%>%filter(Identity >= 97))
+median(RM1679clean$Identity)
+#94.2
+```
+
+### Identity distribution 
+
+```{r}
+library(ggplot2)
+library(cowplot)
+RM1679clean$family<-sub("TE_00001679","mMothkiller1",RM1679clean$family)
+fig1a<-RM1679clean%>%
+  ggplot(aes(x=Identity,y=family,fill=family)) + 
+  geom_violin(fill="cadetblue") +
+  geom_boxplot(width =0.1,outlier.size = 0.2, fill="white") +
+  theme_cowplot(16)+
+  theme(legend.position = "none")+
+  
+  ylab("Family")
+print(fig1a)
+```
+
+### length distribution
+
+Average length is 117.4448bp 
+
+```{r}
+
+fig1b<-RM1679clean %>% ggplot(aes(x=length)) +
+  geom_histogram(fill="chocolate", binwidth = 5) +
+  theme_bw(16)+
+  xlab("Length") +
+  ylab("Copy number")
+print(fig1b)
+```
+```{r}
+avglength<-mean(RM1679clean$length)
+#117.4448
+RM1679clean%>% group_by(length) %>% summarise(n=n()) %>% arrange(desc(n))
+
+
+```
+
+## extract the ones are full length
+
+276+256 = 
+
+```{r}
+
+RM1679full1<-RM1679clean %>% filter(rstart == "(0)") %>% filter(rleft == 1)
+#276
+```
+```{r}
+RM1679full2<-RM1679clean %>% filter(rleft == "(0)") %>% filter(rstart == 1)
+RM1679full<-rbind(RM1679full1,RM1679full2) %>% select(c(query,qstart,qend))
+count(RM1679full1 %>% filter(Identity > 97))
+#115
+count(RM1679full2 %>% filter(Identity > 97))
+#92
+write_tsv(RM1679full,"~/bigdata/activefam/Emai1679_2024//RM1679full.rm.gff3", col_names = F)
+```
+
+## Inspect distance with nearby genes 
+
+* Look at genes on + and - strand seperately, if genes on + strand, if TE is upstream, TE end > gene start, if TE is downstream gene end < TE start 
+
+```{r}
+
+library(tidyverse)
+RM1679genes <- read_tsv("~/bigdata/activefam/Emai1679_2024/insertionPref/RM1679fullgenes.bed",col_names = F)
+RM1679plus<- RM1679genes %>% filter(X10 == "+")
+RM1679upplus<- RM1679plus %>% filter(X3 < X7) %>% mutate(distance = X7 - X3)
+RM1679downplus<-RM1679plus %>% filter(X2 > X8) %>% mutate(distance = X2 - X8)
+#group1<-anti_join(fam1679plus,fam1679upplus)
+#group2<-anti_join(group1,fam1679downplus)
+#group2
+```
+
+* if genes are on minus strand, if TE is on upstream, TE start > gene end, if TE is downstream then TEend < gene start
+
+```{r}
+RM1679minus<- RM1679genes %>% filter(X10 == "-")
+RM1679upminus<- RM1679minus %>% filter(X2 > X8) %>% mutate(distance = X2 - X8)
+RM1679downminus<-RM1679minus %>% filter(X3< X7) %>% mutate(distance = X7 - X3)
+#group3<-anti_join(fam1679minus,fam1679upminus)
+#group4<-anti_join(group3,fam1679downminus)
+#group4
+```
+
+* plot insertion density within 5kb, from TSS start site to upstream, and TES to downstream 
+
+```{r}
+RM1679up <-rbind(RM1679upplus,RM1679upminus)
+RM1679down<-rbind(RM1679downplus,RM1679downminus)
+
+RM1679upclose<-RM1679up %>% filter(distance < 5000)
+RM1679downclose<-RM1679down %>% filter(distance < 5000)
+```
+
+
+Upstream of TSS peak denstity is 208.79
+
+```{r}
+library(cowplot)
+library(ggplot2)
+updensity <-  density(RM1679upclose$distance)
+peak_densityup <- updensity$x[which.max(updensity$y)]
+
+fig2bup<-RM1679upclose %>% ggplot(aes(x=distance)) + geom_density() + theme_cowplot(16)+
+  scale_x_reverse() +
+  geom_vline(xintercept = peak_densityup, linetype = "dashed", color = "red") +
+  xlab("Distance from TSS") +
+  ylab("Density")
+print(fig2bup)
+```
+Peak density downstream of TES is 320.58bp 
+
+```{r}
+downdensity <- density(RM1679downclose$distance)
+peak_densitydown <- downdensity$x[which.max(downdensity$y)]
+#290.32
+fig2bdown<-RM1679downclose %>% ggplot(aes(x=distance)) + geom_density() + theme_cowplot(16) +
+  geom_vline(xintercept = peak_densitydown, linetype = "dashed", color = "red") +
+  xlab("Distance from TES")+
+  ylab("Density")
+print(fig2bdown)
+```
+```{r}
+RM1679up %>% filter(distance > 5000)
+#124
+```
+```{r}
+RM1679up %>% filter(1000<distance) %>% filter(distance <= 5000)
+#64
+```
+```{r}
+RM1679up %>% filter(distance <=1000)
+#187
+
+```
+```{r}
+RM1679down %>% filter(distance > 5000)
+#83
+```
+```{r}
+RM1679down %>% filter(distance > 1000) %>% filter(distance<=5000)
+#15
+```
+```{r}
+RM1679down %>% filter(distance <=1000)
+#39
+
+```
+```{r}
+df1<-data.frame(
+  regions = c(">5kb Upstream","1-5kb Upstream", "1kb Upstream", "5\' UTR","Exon","Intron", "3\' UTR","1kb Downstream","1-5kb Downstream",">5kb Downstream"),
+  counts = c(124,65,187,16,3,0,1,39,15,83)
+)
+
+```
+
+```{r eval=FALSE, include=FALSE}
+library(ggplot2)
+library(tidyverse)
+library(cowplot)
+df$regions<-as.character(df$regions)
+Re = c(">5kb Upstream","1-5kb Upstream", "1kb Upstream", "5\' UTR","Exon","Intron", "3\' UTR","1kb Downstream","1-5kb Downstream",">5kb Downstream")
+fig2a<-df %>% ggplot(aes(x=fct_relevel(regions,Re), y=counts)) +
+  geom_bar(stat = "identity",fill = "forestgreen") +
+  theme_cowplot(16)+ 
+  theme(axis.text.x =element_text( 
+    angle = 90, vjust = 1
+    ))+
+  xlab("Regions")+
+  ylab("Copy number")
+print(fig2a)
+```
+# Normalize with feature length
+```{r}
+df1nor<-left_join(df1,feature)
+df1nor<-df1nor %>% mutate(perbase = counts/length)
+```
+```{r}
+df1nor$regions<-as.character(df$regions)
+Re = c(">5kb Upstream","1-5kb Upstream", "1kb Upstream", "5\' UTR","Exon","Intron", "3\' UTR","1kb Downstream","1-5kb Downstream",">5kb Downstream")
+fig2a<-df1nor %>% ggplot(aes(x=fct_relevel(regions,Re), y=perbase)) +
+  geom_bar(stat = "identity",fill = "forestgreen") +
+  theme_cowplot(16)+ 
+  theme(axis.text.x =element_text( 
+    angle = 90, vjust = 1
+    ))+
+  xlab("Regions")+
+  ylab("Copy number/bp")
+print(fig2a)
+```
+
+```{r}
+fig2b<-plot_grid(fig2bup,fig2bdown,nrow = 2,align = "v")
+fig2<-plot_grid(fig2a,fig2b,labels = c("A","B"),ncol = 2)
+print(fig2)
+ggsave("plots/fig2.pdf",fig2,
+       dpi = 600,
+       units = "in",
+       width = 11,
+       height  = 7)
+```
+
+## Chromosome insertion location for 2 MITE families
+
+```{r}
+library(tidyverse)
+Emaigenome<-read_tsv("~/bigdata/GeneDensity/EmaiGenome.txt",col_names = c("chr","end"))
+Emaigenome<-Emaigenome %>% mutate(start = 1) %>% select(c(chr,start,end))
+write_tsv(Emaigenome,"~/bigdata/activefam/Emai1679_2024/insertionPref/genome.txt")
+RM1679loc<-RM1679clean %>% select(c(query,qstart,qend))
+#RM1679loc<-RM1679loc %>% mutate(name = "fam1679") %>% mutate(gieStain = "acen")
+cluster2rmclean<-cluster2rm %>% mutate(length = qend -qstart +1)
+cluster2rmclean<-filter(cluster2rmclean,length >=80)
+cluster2loc<-cluster2rmclean %>% select(c(query,qstart,qend))
+#cluster2loc<-cluster2loc %>% mutate(name = "cluster2") %>% mutate(gieStain = "stalk")
+#locs<-rbind(RM1679loc,cluster2loc)
+#write_tsv(locs,"~/bigdata/activefam/Emai1679_2024/insertionPref/cytobands.txt")
+```
+```{r}
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+  BiocManager::install("karyoploteR")
+library(karyoploteR)
+ 
+custom.genome <- toGRanges("~/bigdata/activefam/Emai1679_2024/insertionPref/genome.txt")
+#custom.cytobands <- toGRanges("~/bigdata/activefam/Emai1679_2024/insertionPref/cytobands.txt")
+write_tsv(cluster2loc,"~/bigdata/activefam/Emai1679_2024/insertionPref/cluster2loc.txt")
+write_tsv(RM1679loc,"~/bigdata/activefam/Emai1679_2024/insertionPref/RM1679loc.txt")
+```
+```{r}
+pdf("~/bigdata/activefam/Emai1679_2024/insertionPref/location.pdf")
+
+kp <- plotKaryotype(genome = custom.genome,plot.type = 2)
+#kpAddCytobandsAsLine(kp)
+#kp<-plotKaryotype(genome = custom.genome,plot.type = 2,chromosomes = custom.genome$chr)
+#kpText(kp, chr = "Chr01", x = 10000000, y = 0.5, labels = "Test Label")
+kpPlotRegions(kp, data="~/bigdata/activefam/Emai1679_2024/insertionPref/cluster2loc.txt", col="#AACCFF")
+kpPlotRegions(kp, data="~/bigdata/activefam/Emai1679_2024/insertionPref/RM1679loc.txt", col = "green")
+dev.off()
+```
+
+## add TIR and TSD figures
+```{r}
+leftTIR<-ggdraw()+draw_image("plots/1679leftTIR.png")
+rightTIR<-ggdraw()+draw_image("plots/1679rightTIR.png")
+TIR<-align_plots(leftTIR,rightTIR,align = "v",axis = "l")
+names(TIR) <- c("lTIR", "rTIR")
+fig1c<-plot_grid(TIR$lTIR,TIR$rTIR,labels = c("5' TIR","3' TIR"),nrow = 2)
+print(fig1c)
+```
+```{r}
+TSD1679<-ggdraw()+draw_image("plots/1679TSDnew1.png")
+fig1d<-plot_grid(TSD1679,labels = c("TSDs"))
+print(fig1d)
+```
+```{r}
+fig1<-plot_grid(fig1a,fig1b,fig1c,fig1d,
+                labels = c("A","B","C","D"),ncol = 2,nrow = 2)
+print(fig1)
+```
+```{r}
+ggsave("plots/fig1.pdf",fig1,dpi=600,
+       units = "in",
+       width = 9,
+       height = 7)
+```
+
