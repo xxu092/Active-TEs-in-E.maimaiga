@@ -19,7 +19,7 @@ get the distance between TE and nearest genes
 ```
 bedtools closest -a RM1679full.sorted.rm.gff3 -b Entmai1_GeneCatalog_20210808.genes2.sorted.gff3 > RM1679fullgenes.bed
 ```
-# To get tsds of full-length elements
+# To get tsds and TIRs of full-length elements
 get location of full length element and TSD locations using `getfulllengthlocation.R` script
 and get fasta from the location table 
 and do muscle to do alignment
